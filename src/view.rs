@@ -176,6 +176,26 @@ impl Scene {
         self.border(rect.inset(-6.9), radius + 6.9, 3.7, c(0xffffff, 0.10));
         self.border(rect.inset(-3.2), radius + 3.2, 3.2, c(0xf0f0f0, 1.));
     }
+    /// Gentle, animated outline for app tiles. Intensity follows the
+    /// existing focus tween in both directions; other controls keep their
+    /// original, high-contrast focus ring.
+    fn app_focus_ring(&mut self, rect: Rect, radius: f32, intensity: f32) {
+        if intensity <= 0.001 {
+            return;
+        }
+        self.border(
+            rect.inset(-5.),
+            radius + 5.,
+            1.6,
+            c(0xabc9ec, 0.12 * intensity),
+        );
+        self.border(
+            rect.inset(-2.3),
+            radius + 2.3,
+            1.9,
+            c(0xe0e9f7, 0.62 * intensity),
+        );
+    }
     fn shadow(&mut self, rect: Rect, radius: f32, blur: f32, y: f32, alpha: f32) {
         self.draw.push(Draw::Shadow(
             Rect::new(rect.x, rect.y + y, rect.w, rect.h),
@@ -514,7 +534,7 @@ fn tile(
     let start = out.draw.len();
     let focused = state.focus == Target::App(app.id.clone());
     let emphasis = state.app_focus_amount(&app.id);
-    let scale = 1. + 0.04 * emphasis;
+    let scale = 1. + 0.06 * emphasis;
     let grow_x = (rect.w * (scale - 1.)) / 2.;
     let grow_y = (rect.h * (scale - 1.)) / 2.;
     let face = Rect::new(
@@ -527,9 +547,9 @@ fn tile(
     out.shadow(
         face,
         19.2 * scale,
-        22. + 12. * emphasis,
+        22. + 19. * emphasis,
         9. + 5. * emphasis,
-        0.165 + 0.235 * emphasis,
+        0.165 + 0.29 * emphasis,
     );
     app_face(out, assets, app, face, state.preferences.language, 19.2 * scale);
     if pinned {
@@ -561,9 +581,8 @@ fn tile(
             c(0xededed, 1.),
         );
     }
-    if focused {
-        out.ring(face, 19.2 * scale);
-    }
+    // Let the outline fade out after focus leaves, instead of disappearing.
+    out.app_focus_ring(face, 19.2 * scale, emphasis);
     if state.page == Page::Apps && state.filter == 5 {
         out.fade(start, 0.45, 1.);
     }
