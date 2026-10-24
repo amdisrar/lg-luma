@@ -5,7 +5,9 @@ use crate::model::{
 };
 use crate::weather::{self, Unit};
 use serde::Serialize;
-use std::time::{Duration, Instant};
+use std::{collections::HashMap, time::{Duration, Instant}};
+
+const APP_FOCUS_ANIMATION_SECONDS: f32 = 0.16;
 
 pub const WEATHER_SECTION: usize = 2;
 pub const INPUTS_SECTION: usize = 3;
@@ -158,9 +160,17 @@ pub const KEYS: [&str; 40] = [
     "Delete", "Clear", "Done",
 ];
 
+struct AppFocusTween {
+    from: f32,
+    to: f32,
+    started: Instant,
+}
+
 pub struct State {
     pub page: Page,
     pub focus: Target,
+    previous_focus: Target,
+    app_focus_tweens: HashMap<String, AppFocusTween>,
     pub inventory: Inventory,
     pub preferences: Preferences,
     pub query: String,
@@ -194,6 +204,8 @@ impl State {
         Self {
             page: Page::Home,
             focus: Target::Nav(0),
+            previous_focus: Target::Nav(0),
+            app_focus_tweens: HashMap::new(),
             inventory: Inventory::default(),
             preferences,
             query: String::new(),
@@ -222,12 +234,80 @@ impl State {
         }
     }
 
+    /// Focus intensity from 0 (resting) to 1 (focused). Geometry and hit targets
+    /// are kept separate so pointer hover cannot move its own control.
+    pub fn app_focus_amount(&self, id: &str) -> f32 {
+        if self.preferences.reduced_motion {
+            return if matches!(&self.focus, Target::App(selected) if selected == id) {
+                1.
+            } else {
+                0.
+            };
+        }
+        if let Some(tween) = self.app_focus_tweens.get(id) {
+            let t = (tween.started.elapsed().as_secs_f32() / APP_FOCUS_ANIMATION_SECONDS)
+                .clamp(0., 1.);
+            let eased = 1. - (1. - t).powi(3);
+            return tween.from + (tween.to - tween.from) * eased;
+        }
+        // Before tick processes a new input, show the last completed focus.
+        if matches!(&self.previous_focus, Target::App(selected) if selected == id) {
+            1.
+        } else {
+            0.
+        }
+    }
+
+    fn update_app_focus_animation(&mut self) {
+        if self.previous_focus != self.focus {
+            let previous = match &self.previous_focus {
+                Target::App(id) => Some(id.clone()),
+                _ => None,
+            };
+            let next = match &self.focus {
+                Target::App(id) => Some(id.clone()),
+                _ => None,
+            };
+            if self.preferences.reduced_motion {
+                self.app_focus_tweens.clear();
+            } else if previous != next {
+                let now = Instant::now();
+                for id in previous.into_iter().chain(next.clone()) {
+                    let from = self.app_focus_amount(&id);
+                    let to = if next.as_deref() == Some(id.as_str()) {
+                        1.
+                    } else {
+                        0.
+                    };
+                    if (from - to).abs() > 0.001 {
+                        self.app_focus_tweens
+                            .insert(id, AppFocusTween { from, to, started: now });
+                    } else {
+                        self.app_focus_tweens.remove(&id);
+                    }
+                }
+            }
+            self.previous_focus = self.focus.clone();
+        }
+        if self.preferences.reduced_motion {
+            self.app_focus_tweens.clear();
+        }
+        let active = !self.app_focus_tweens.is_empty();
+        self.app_focus_tweens.retain(|_, tween| {
+            tween.started.elapsed().as_secs_f32() < APP_FOCUS_ANIMATION_SECONDS
+        });
+        if active {
+            self.dirty = true;
+        }
+    }
+
     pub fn notify(&mut self, text: impl Into<String>) {
         self.notice = Some((text.into(), Instant::now()));
         self.dirty = true;
     }
 
     pub fn tick(&mut self) {
+        self.update_app_focus_animation();
         let recents_open = self.recents_open();
         if recents_open || self.recents.visibility > 0. {
             self.dirty |= self.recents.animate(
@@ -278,7 +358,9 @@ impl State {
     }
 
     pub fn animating(&self) -> bool {
-        ((self.recents_open() || self.recents.visibility > 0.)
+        (!self.preferences.reduced_motion
+            && (self.previous_focus != self.focus || !self.app_focus_tweens.is_empty()))
+            || ((self.recents_open() || self.recents.visibility > 0.)
             && (self.recents.visibility != if self.recents_open() { 1. } else { 0. }
                 || (!self.pointer && self.recents.position != self.recents.selected as f32)))
             || self.previous_background.is_some()
