@@ -171,6 +171,7 @@ pub struct State {
     pub focus: Target,
     previous_focus: Target,
     app_focus_tweens: HashMap<String, AppFocusTween>,
+    input_focus_tweens: HashMap<String, AppFocusTween>,
     pub inventory: Inventory,
     pub preferences: Preferences,
     pub query: String,
@@ -206,6 +207,7 @@ impl State {
             focus: Target::Nav(0),
             previous_focus: Target::Nav(0),
             app_focus_tweens: HashMap::new(),
+            input_focus_tweens: HashMap::new(),
             inventory: Inventory::default(),
             preferences,
             query: String::new(),
@@ -258,6 +260,29 @@ impl State {
         }
     }
 
+    /// Input cards use the same timing and easing as app tiles, but their
+    /// tween state is independent so switching between apps and inputs works.
+    pub fn input_focus_amount(&self, id: &str) -> f32 {
+        if self.preferences.reduced_motion {
+            return if matches!(&self.focus, Target::Input(selected) if selected == id) {
+                1.
+            } else {
+                0.
+            };
+        }
+        if let Some(tween) = self.input_focus_tweens.get(id) {
+            let t = (tween.started.elapsed().as_secs_f32() / APP_FOCUS_ANIMATION_SECONDS)
+                .clamp(0., 1.);
+            let eased = 1. - (1. - t).powi(3);
+            return tween.from + (tween.to - tween.from) * eased;
+        }
+        if matches!(&self.previous_focus, Target::Input(selected) if selected == id) {
+            1.
+        } else {
+            0.
+        }
+    }
+
     fn update_app_focus_animation(&mut self) {
         if self.previous_focus != self.focus {
             let previous = match &self.previous_focus {
@@ -268,22 +293,49 @@ impl State {
                 Target::App(id) => Some(id.clone()),
                 _ => None,
             };
+            let previous_input = match &self.previous_focus {
+                Target::Input(id) => Some(id.clone()),
+                _ => None,
+            };
+            let next_input = match &self.focus {
+                Target::Input(id) => Some(id.clone()),
+                _ => None,
+            };
             if self.preferences.reduced_motion {
                 self.app_focus_tweens.clear();
-            } else if previous != next {
+                self.input_focus_tweens.clear();
+            } else {
                 let now = Instant::now();
-                for id in previous.into_iter().chain(next.clone()) {
-                    let from = self.app_focus_amount(&id);
-                    let to = if next.as_deref() == Some(id.as_str()) {
-                        1.
-                    } else {
-                        0.
-                    };
-                    if (from - to).abs() > 0.001 {
-                        self.app_focus_tweens
-                            .insert(id, AppFocusTween { from, to, started: now });
-                    } else {
-                        self.app_focus_tweens.remove(&id);
+                if previous != next {
+                    for id in previous.into_iter().chain(next.clone()) {
+                        let from = self.app_focus_amount(&id);
+                        let to = if next.as_deref() == Some(id.as_str()) {
+                            1.
+                        } else {
+                            0.
+                        };
+                        if (from - to).abs() > 0.001 {
+                            self.app_focus_tweens
+                                .insert(id, AppFocusTween { from, to, started: now });
+                        } else {
+                            self.app_focus_tweens.remove(&id);
+                        }
+                    }
+                }
+                if previous_input != next_input {
+                    for id in previous_input.into_iter().chain(next_input.clone()) {
+                        let from = self.input_focus_amount(&id);
+                        let to = if next_input.as_deref() == Some(id.as_str()) {
+                            1.
+                        } else {
+                            0.
+                        };
+                        if (from - to).abs() > 0.001 {
+                            self.input_focus_tweens
+                                .insert(id, AppFocusTween { from, to, started: now });
+                        } else {
+                            self.input_focus_tweens.remove(&id);
+                        }
                     }
                 }
             }
@@ -291,9 +343,13 @@ impl State {
         }
         if self.preferences.reduced_motion {
             self.app_focus_tweens.clear();
+            self.input_focus_tweens.clear();
         }
-        let active = !self.app_focus_tweens.is_empty();
+        let active = !self.app_focus_tweens.is_empty() || !self.input_focus_tweens.is_empty();
         self.app_focus_tweens.retain(|_, tween| {
+            tween.started.elapsed().as_secs_f32() < APP_FOCUS_ANIMATION_SECONDS
+        });
+        self.input_focus_tweens.retain(|_, tween| {
             tween.started.elapsed().as_secs_f32() < APP_FOCUS_ANIMATION_SECONDS
         });
         if active {
@@ -359,7 +415,9 @@ impl State {
 
     pub fn animating(&self) -> bool {
         (!self.preferences.reduced_motion
-            && (self.previous_focus != self.focus || !self.app_focus_tweens.is_empty()))
+            && (self.previous_focus != self.focus
+                || !self.app_focus_tweens.is_empty()
+                || !self.input_focus_tweens.is_empty()))
             || ((self.recents_open() || self.recents.visibility > 0.)
             && (self.recents.visibility != if self.recents_open() { 1. } else { 0. }
                 || (!self.pointer && self.recents.position != self.recents.selected as f32)))
