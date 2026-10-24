@@ -239,6 +239,10 @@ impl Scene {
     }
 }
 
+fn blend_color(from: Color, to: Color, amount: f32) -> Color {
+    std::array::from_fn(|i| from[i] + (to[i] - from[i]) * amount)
+}
+
 fn c(rgb: u32, alpha: f32) -> Color {
     [
         ((rgb >> 16) & 255) as f32 / 255.,
@@ -528,26 +532,37 @@ fn tile(
     }
     let start = out.draw.len();
     let focused = state.focus == Target::App(app.id.clone());
-    out.shadow(
-        rect,
-        19.2,
-        if focused { 34. } else { 22. },
-        if focused { 14. } else { 9. },
-        if focused { 0.4 } else { 0.165 },
+    let emphasis = state.app_focus_amount(&app.id);
+    let scale = 1. + 0.06 * emphasis;
+    let grow_x = (rect.w * (scale - 1.)) / 2.;
+    let grow_y = (rect.h * (scale - 1.)) / 2.;
+    let face = Rect::new(
+        rect.x - grow_x,
+        rect.y - grow_y,
+        rect.w + 2. * grow_x,
+        rect.h + 2. * grow_y,
     );
-    app_face(out, assets, app, rect, state.preferences.language, 19.2);
+    // Animate only the paint geometry, never the control/hit rectangle.
+    out.shadow(
+        face,
+        19.2 * scale,
+        22. + 19. * emphasis,
+        9. + 5. * emphasis,
+        0.165 + 0.29 * emphasis,
+    );
+    app_face(out, assets, app, face, state.preferences.language, 19.2 * scale);
     if pinned {
         out.icon(
             assets,
             "heart-filled",
-            Rect::new(rect.x + rect.w - 27.2, rect.y + 11.2, 16., 16.),
+            Rect::new(face.x + face.w - 27.2, face.y + 11.2, 16., 16.),
             c(0xffffff, 0.9),
         );
     }
     if state.moving.as_ref() == Some(&app.id) {
         let indicator = Rect::new(
-            rect.x + rect.w / 2. - 37.6,
-            rect.y + rect.h - 33.6,
+            face.x + face.w / 2. - 37.6,
+            face.y + face.h - 33.6,
             75.2,
             24.,
         );
@@ -565,9 +580,8 @@ fn tile(
             c(0xededed, 1.),
         );
     }
-    if focused {
-        out.ring(rect, 19.2);
-    }
+    // Let the outline fade out after focus leaves, instead of disappearing.
+    // Borderless focus variant: zoom and glow communicate selection.
     if state.page == Page::Apps && state.filter == 5 {
         out.fade(start, 0.45, 1.);
     }
@@ -961,50 +975,57 @@ fn home(out: &mut Scene, state: &State, assets: &Assets, now: OffsetDateTime) {
             569.1,
             104.,
         );
-        let focused = state.focus == Target::Input(input.id.clone());
+        let emphasis = state.input_focus_amount(&input.id);
+        let scale = 1. + 0.06 * emphasis;
+        let face = Rect::new(
+            rect.x - rect.w * (scale - 1.) / 2.,
+            rect.y - rect.h * (scale - 1.) / 2.,
+            rect.w * scale,
+            rect.h * scale,
+        );
+        let radius = 18.4 * scale;
+        // As with app tiles, only the drawing scales. Hit testing always uses
+        // the original card rectangle so hover cannot make focus jitter.
         out.shadow(
-            rect,
-            18.4,
-            if focused { 34. } else { 4. },
-            if focused { 14. } else { 1. },
-            if focused { 0.4 } else { 0.01 },
+            face,
+            radius,
+            4. + 37. * emphasis,
+            1. + 13. * emphasis,
+            0.01 + 0.445 * emphasis,
         );
         out.draw.push(Draw::RoundedGradient(
-            rect,
-            18.4,
-            if focused {
-                c(0x30363c, 0.70)
-            } else {
-                c(0x20252b, 0.60)
-            },
-            if focused {
-                c(0x242a30, 0.65)
-            } else {
-                c(0x171c22, 0.55)
-            },
+            face,
+            radius,
+            blend_color(c(0x20252b, 0.60), c(0x30363c, 0.70), emphasis),
+            blend_color(c(0x171c22, 0.55), c(0x242a30, 0.65), emphasis),
         ));
         out.border(
-            rect,
-            18.4,
+            face,
+            radius,
             1.,
-            c(0xffffff, if focused { 0.24 } else { 0.063 }),
+            c(0xffffff, 0.063),
         );
-        let art = Rect::new(rect.x + 21., rect.y + 24., 56., 56.);
+        let art = Rect::new(
+            face.x + 21. * scale,
+            face.y + 24. * scale,
+            56. * scale,
+            56. * scale,
+        );
         out.draw.push(Draw::RoundedGradient(
             art,
-            12.8,
+            12.8 * scale,
             c(0xd6d6d6, 0.24),
             c(0xa0a0a0, 0.10),
         ));
         let name = state.preferences.input_name(input);
         let icon = input_icon(input, name);
-        let size = if icon == "apple-tv" { 41.6 } else { 35.2 };
+        let size = (if icon == "apple-tv" { 41.6 } else { 35.2 }) * scale;
         out.icon(
             assets,
             &format!("input-{icon}"),
             Rect::new(
-                art.x + (56. - size) / 2.,
-                art.y + (56. - size) / 2.,
+                art.x + (art.w - size) / 2.,
+                art.y + (art.h - size) / 2.,
                 size,
                 size,
             ),
@@ -1012,21 +1033,29 @@ fn home(out: &mut Scene, state: &State, assets: &Assets, now: OffsetDateTime) {
         );
         out.text(
             state.preferences.input_title(input),
-            Rect::new(rect.x + 93., rect.y + 24.3, 450., 28.8),
-            text(24., 500, -0.03),
+            Rect::new(
+                face.x + 93. * scale,
+                face.y + 24.3 * scale,
+                450. * scale,
+                28.8 * scale,
+            ),
+            text(24. * scale, 500, -0.03),
             WHITE,
             false,
         );
         out.text(
             input_status(input, name.is_some(), language),
-            Rect::new(rect.x + 93., rect.y + 58.7, 450., 20.),
-            text(13.12, 400, 0.).leading(1.5),
+            Rect::new(
+                face.x + 93. * scale,
+                face.y + 58.7 * scale,
+                450. * scale,
+                20. * scale,
+            ),
+            text(13.12 * scale, 400, 0.).leading(1.5),
             c(0xe8e8e8, 0.48),
             false,
         );
-        if focused {
-            out.ring(rect, 18.4);
-        }
+        // Borderless focus variant: zoom and glow communicate selection.
         out.control(Target::Input(input.id.clone()), rect, true);
     }
 }
