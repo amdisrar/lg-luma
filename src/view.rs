@@ -513,26 +513,37 @@ fn tile(
     }
     let start = out.draw.len();
     let focused = state.focus == Target::App(app.id.clone());
-    out.shadow(
-        rect,
-        19.2,
-        if focused { 34. } else { 22. },
-        if focused { 14. } else { 9. },
-        if focused { 0.4 } else { 0.165 },
+    let emphasis = state.app_focus_amount(&app.id);
+    let scale = 1. + 0.04 * emphasis;
+    let grow_x = (rect.w * (scale - 1.)) / 2.;
+    let grow_y = (rect.h * (scale - 1.)) / 2.;
+    let face = Rect::new(
+        rect.x - grow_x,
+        rect.y - grow_y,
+        rect.w + 2. * grow_x,
+        rect.h + 2. * grow_y,
     );
-    app_face(out, assets, app, rect, state.preferences.language, 19.2);
+    // Animate only the paint geometry, never the control/hit rectangle.
+    out.shadow(
+        face,
+        19.2 * scale,
+        22. + 12. * emphasis,
+        9. + 5. * emphasis,
+        0.165 + 0.235 * emphasis,
+    );
+    app_face(out, assets, app, face, state.preferences.language, 19.2 * scale);
     if pinned {
         out.icon(
             assets,
             "heart-filled",
-            Rect::new(rect.x + rect.w - 27.2, rect.y + 11.2, 16., 16.),
+            Rect::new(face.x + face.w - 27.2, face.y + 11.2, 16., 16.),
             c(0xffffff, 0.9),
         );
     }
     if state.moving.as_ref() == Some(&app.id) {
         let indicator = Rect::new(
-            rect.x + rect.w / 2. - 37.6,
-            rect.y + rect.h - 33.6,
+            face.x + face.w / 2. - 37.6,
+            face.y + face.h - 33.6,
             75.2,
             24.,
         );
@@ -551,7 +562,7 @@ fn tile(
         );
     }
     if focused {
-        out.ring(rect, 19.2);
+        out.ring(face, 19.2 * scale);
     }
     if state.page == Page::Apps && state.filter == 5 {
         out.fade(start, 0.45, 1.);
