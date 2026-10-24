@@ -586,7 +586,7 @@ fn tile(
         );
     }
     // Let the outline fade out after focus leaves, instead of disappearing.
-    out.app_focus_ring(face, 19.2 * scale, emphasis);
+    // Borderless focus variant: zoom and glow communicate selection.
     if state.page == Page::Apps && state.filter == 5 {
         out.fade(start, 0.45, 1.);
     }
@@ -1008,7 +1008,7 @@ fn home(out: &mut Scene, state: &State, assets: &Assets, now: OffsetDateTime) {
             face,
             radius,
             1.,
-            c(0xffffff, 0.063 + 0.12 * emphasis),
+            c(0xffffff, 0.063),
         );
         let art = Rect::new(
             face.x + 21. * scale,
@@ -1060,7 +1060,7 @@ fn home(out: &mut Scene, state: &State, assets: &Assets, now: OffsetDateTime) {
             c(0xe8e8e8, 0.48),
             false,
         );
-        out.app_focus_ring(face, radius, emphasis);
+        // Borderless focus variant: zoom and glow communicate selection.
         out.control(Target::Input(input.id.clone()), rect, true);
     }
 }
