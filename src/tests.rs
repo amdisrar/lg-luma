@@ -38,6 +38,69 @@ fn controls(state: &State) -> Vec<crate::state::Control> {
 }
 
 #[test]
+fn app_focus_animation_preserves_hitbox_and_reduced_motion() {
+    let mut state = ready();
+    let id = state.inventory.apps[0].id.clone();
+    let original = controls(&state)
+        .into_iter()
+        .find(|control| control.target == Target::App(id.clone()))
+        .expect("demo app control")
+        .rect;
+
+    state.pointer_focus(Target::App(id.clone()));
+    state.tick();
+    assert!((0. ..=1.).contains(&state.app_focus_amount(&id)));
+    assert!(state.animating());
+
+    let updated = controls(&state)
+        .into_iter()
+        .find(|control| control.target == Target::App(id.clone()))
+        .expect("focused app control")
+        .rect;
+    assert_eq!(
+        [updated.x, updated.y, updated.w, updated.h],
+        [original.x, original.y, original.w, original.h],
+    );
+
+    state.preferences.reduced_motion = true;
+    state.tick();
+    assert_eq!(state.app_focus_amount(&id), 1.);
+    assert!(!state.animating());
+}
+
+#[test]
+fn input_focus_animation_preserves_hitbox_and_reduced_motion() {
+    let mut state = ready();
+    let id = state.inventory.inputs[0].id.clone();
+    let original = controls(&state)
+        .into_iter()
+        .find(|control| control.target == Target::Input(id.clone()))
+        .expect("demo input control")
+        .rect;
+
+    state.pointer_focus(Target::Input(id.clone()));
+    state.tick();
+    let amount = state.input_focus_amount(&id);
+    assert!((0. ..=1.).contains(&amount));
+    assert!(state.animating());
+
+    let updated = controls(&state)
+        .into_iter()
+        .find(|control| control.target == Target::Input(id.clone()))
+        .expect("focused input control")
+        .rect;
+    assert_eq!(
+        [updated.x, updated.y, updated.w, updated.h],
+        [original.x, original.y, original.w, original.h],
+    );
+
+    state.preferences.reduced_motion = true;
+    state.tick();
+    assert_eq!(state.input_focus_amount(&id), 1.);
+    assert!(!state.animating());
+}
+
+#[test]
 fn favorites_edge_fragments_share_draw_hit_and_wheel_viewports() {
     let mut state = ready();
     let favorites: Vec<_> = state
