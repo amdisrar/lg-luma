@@ -550,7 +550,14 @@ fn tile(
         9. + 5. * emphasis,
         0.165 + 0.29 * emphasis,
     );
-    app_face(out, assets, app, face, state.preferences.language, 19.2 * scale);
+    app_face(
+        out,
+        assets,
+        app,
+        face,
+        state.preferences.language,
+        19.2 * scale,
+    );
     if pinned {
         out.icon(
             assets,
@@ -999,12 +1006,7 @@ fn home(out: &mut Scene, state: &State, assets: &Assets, now: OffsetDateTime) {
             blend_color(c(0x20252b, 0.60), c(0x30363c, 0.70), emphasis),
             blend_color(c(0x171c22, 0.55), c(0x242a30, 0.65), emphasis),
         ));
-        out.border(
-            face,
-            radius,
-            1.,
-            c(0xffffff, 0.063),
-        );
+        out.border(face, radius, 1., c(0xffffff, 0.063));
         let art = Rect::new(
             face.x + 21. * scale,
             face.y + 24. * scale,

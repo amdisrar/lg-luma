@@ -5,7 +5,10 @@ use crate::model::{
 };
 use crate::weather::{self, Unit};
 use serde::Serialize;
-use std::{collections::HashMap, time::{Duration, Instant}};
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 const APP_FOCUS_ANIMATION_SECONDS: f32 = 0.16;
 
@@ -247,8 +250,8 @@ impl State {
             };
         }
         if let Some(tween) = self.app_focus_tweens.get(id) {
-            let t = (tween.started.elapsed().as_secs_f32() / APP_FOCUS_ANIMATION_SECONDS)
-                .clamp(0., 1.);
+            let t =
+                (tween.started.elapsed().as_secs_f32() / APP_FOCUS_ANIMATION_SECONDS).clamp(0., 1.);
             let eased = 1. - (1. - t).powi(3);
             return tween.from + (tween.to - tween.from) * eased;
         }
@@ -271,8 +274,8 @@ impl State {
             };
         }
         if let Some(tween) = self.input_focus_tweens.get(id) {
-            let t = (tween.started.elapsed().as_secs_f32() / APP_FOCUS_ANIMATION_SECONDS)
-                .clamp(0., 1.);
+            let t =
+                (tween.started.elapsed().as_secs_f32() / APP_FOCUS_ANIMATION_SECONDS).clamp(0., 1.);
             let eased = 1. - (1. - t).powi(3);
             return tween.from + (tween.to - tween.from) * eased;
         }
@@ -315,8 +318,14 @@ impl State {
                             0.
                         };
                         if (from - to).abs() > 0.001 {
-                            self.app_focus_tweens
-                                .insert(id, FocusTween { from, to, started: now });
+                            self.app_focus_tweens.insert(
+                                id,
+                                FocusTween {
+                                    from,
+                                    to,
+                                    started: now,
+                                },
+                            );
                         } else {
                             self.app_focus_tweens.remove(&id);
                         }
@@ -331,8 +340,14 @@ impl State {
                             0.
                         };
                         if (from - to).abs() > 0.001 {
-                            self.input_focus_tweens
-                                .insert(id, FocusTween { from, to, started: now });
+                            self.input_focus_tweens.insert(
+                                id,
+                                FocusTween {
+                                    from,
+                                    to,
+                                    started: now,
+                                },
+                            );
                         } else {
                             self.input_focus_tweens.remove(&id);
                         }
@@ -346,12 +361,10 @@ impl State {
             self.input_focus_tweens.clear();
         }
         let active = !self.app_focus_tweens.is_empty() || !self.input_focus_tweens.is_empty();
-        self.app_focus_tweens.retain(|_, tween| {
-            tween.started.elapsed().as_secs_f32() < APP_FOCUS_ANIMATION_SECONDS
-        });
-        self.input_focus_tweens.retain(|_, tween| {
-            tween.started.elapsed().as_secs_f32() < APP_FOCUS_ANIMATION_SECONDS
-        });
+        self.app_focus_tweens
+            .retain(|_, tween| tween.started.elapsed().as_secs_f32() < APP_FOCUS_ANIMATION_SECONDS);
+        self.input_focus_tweens
+            .retain(|_, tween| tween.started.elapsed().as_secs_f32() < APP_FOCUS_ANIMATION_SECONDS);
         if active {
             self.dirty = true;
         }
@@ -419,8 +432,8 @@ impl State {
                 || !self.app_focus_tweens.is_empty()
                 || !self.input_focus_tweens.is_empty()))
             || ((self.recents_open() || self.recents.visibility > 0.)
-            && (self.recents.visibility != if self.recents_open() { 1. } else { 0. }
-                || (!self.pointer && self.recents.position != self.recents.selected as f32)))
+                && (self.recents.visibility != if self.recents_open() { 1. } else { 0. }
+                    || (!self.pointer && self.recents.position != self.recents.selected as f32)))
             || self.previous_background.is_some()
             || self.panel_started.is_some()
             || (!self.preferences.reduced_motion
